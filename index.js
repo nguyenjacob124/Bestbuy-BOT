@@ -4,6 +4,10 @@ const puppeteer = require('puppeteer');
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+app.get('/', (req, res) => {
+  res.send('Puppeteer Scraper is running 🚀');
+});
+
 app.get('/scrape', async (req, res) => {
   const productUrl = req.query.url;
   const proxy = req.query.proxy;
