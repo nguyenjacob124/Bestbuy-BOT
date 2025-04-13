@@ -1,32 +1,21 @@
 
-# BestBuy Scraper (Final Version)
+# Cloud Proxy Scraper (Render.com + Google Sheet Proxies)
 
 ## Features
-- Express.js API server
-- Dynamic Keep Alive (auto self-ping every 4 minutes)
-- Proxy included (for testing purposes)
-- Input: Product URL
-- Output: JSON (Product Name, Regular Price, Sale Price, Availability, Image)
+- Cloud-ready Render.com setup
+- Dynamic Google Sheet proxy rotation
+- Failover: next proxy auto if fail
+- Health check /keep alive for Render.com
+- Output: Product name, prices, availability, image
 
 ## Usage
 
-### Install dependencies
-npm install
+### Deploy
+1. Upload to your GitHub
+2. Connect to Render.com
+3. Set build command: npm install
+4. Set start command: node index.js
 
-### Run locally
-node index.js
-
-### Access
-http://localhost:10000/scrape?url=https://www.bestbuy.com/site/your-product-url
-
-### Deploy to Render.com
-1. Connect this repo to Render.com
-2. Set build command: npm install
-3. Set start command: node index.js
-4. Deploy!
-
-Public endpoint example:
-https://bestbuy-bot-6my5.onrender.com/scrape?url=YOUR_PRODUCT_URL
-
-Health check:
-https://bestbuy-bot-6my5.onrender.com/health
+### Test
+https://your-render-url.com/health
+https://your-render-url.com/scrape?url=YOUR_PRODUCT_URL
