@@ -1,7 +1,6 @@
 const puppeteer = require('puppeteer');
 const express = require('express');
 const fetch = require('node-fetch');
-const { google } = require('googleapis');
 const app = express();
 const port = process.env.PORT || 10000;
 
@@ -9,8 +8,8 @@ const port = process.env.PORT || 10000;
 const SHEET_ID = '1HdUUxxJPOt7DkOTEClnIFtjignXiFCs0ye99NF-IjH8';
 const SHEET_RANGE = 'Sheet1!A:A'; // Proxies in column A
 
-// Google API key (for public sheets)
-const API_KEY = 'AIzaSyDq9RtV9T3uJ8AZlX4nHCqB6f0GO6zkRgk'; // You can replace with your own
+// Your new Google API key
+const API_KEY = 'AIzaSyDUJ2L0AdhMANBa7l1mZOfTh40NI0f1-NQ';
 
 // Fallback proxy if Google Sheet fails
 const FALLBACK_PROXIES = [
@@ -31,21 +30,30 @@ async function getProxiesFromSheet() {
     }
 
     try {
-        const sheets = google.sheets({ version: 'v4' });
-        const res = await sheets.spreadsheets.values.get({
-            spreadsheetId: SHEET_ID,
-            range: SHEET_RANGE,
-            key: API_KEY,
-        });
+        console.log('Fetching proxies from Google Sheet...');
         
-        const rows = res.data.values;
-        if (rows && rows.length) {
+        // Direct fetch approach with your API key
+        const sheetUrl = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${SHEET_RANGE}?key=${API_KEY}`;
+        console.log(`Requesting: ${sheetUrl}`);
+        
+        const response = await fetch(sheetUrl);
+        
+        if (!response.ok) {
+            console.error(`Google Sheets API error: ${response.status} ${response.statusText}`);
+            const errorText = await response.text();
+            console.error(`Error details: ${errorText}`);
+            throw new Error(`Google Sheets API returned ${response.status}: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data && data.values && data.values.length) {
             // Filter out empty values and trim whitespace
-            const proxies = rows
+            const proxies = data.values
                 .filter(row => row[0] && row[0].trim().length > 0)
                 .map(row => row[0].trim());
                 
-            console.log(`Fetched ${proxies.length} proxies from Google Sheet`);
+            console.log(`Successfully fetched ${proxies.length} proxies from Google Sheet`);
             
             // Update cache
             cachedProxies = proxies;
@@ -53,11 +61,11 @@ async function getProxiesFromSheet() {
             
             return proxies;
         } else {
-            console.log('No proxy data found in Google Sheet.');
+            console.log('No proxy data found in Google Sheet, using fallbacks');
             return FALLBACK_PROXIES;
         }
     } catch (error) {
-        console.error('Error fetching proxies:', error);
+        console.error('Error fetching proxies from Google Sheet:', error);
         return FALLBACK_PROXIES;
     }
 }
@@ -131,151 +139,4 @@ app.get('/scrape', async (req, res) => {
                 const page = await browser.newPage();
                 
                 // Set a realistic user agent
-                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36');
-                
-                // Set authentication if needed
-                if (authOptions.username && authOptions.password) {
-                    await page.authenticate(authOptions);
-                }
-                
-                // Set timeout
-                console.log(`Navigating to ${productUrl}...`);
-                page.setDefaultNavigationTimeout(60000);
-                
-                // Navigate to the product URL
-                await page.goto(productUrl, { waitUntil: 'networkidle2' });
-                
-                // Check if we're on a BestBuy product page
-                const url = page.url();
-                console.log(`Landed on: ${url}`);
-                if (url.includes('bestbuy.com/identity') || url.includes('captcha')) {
-                    console.log('Detected captcha or login page, skipping proxy');
-                    await browser.close();
-                    browser = null;
-                    continue; // Try next proxy
-                }
-                
-                // Extract product info
-                console.log('Extracting product info...');
-                const result = await page.evaluate(() => {
-                    const productName = document.querySelector('h1.sku-title')?.innerText || 
-                                       document.querySelector('.sku-title')?.innerText || null;
-                    
-                    const priceElement = document.querySelector('.priceView-customer-price span') || 
-                                        document.querySelector('.price-box')?.querySelector('span');
-                    
-                    const regularPriceElement = document.querySelector('.pricing-price__regular-price span') || 
-                                              document.querySelector('.regular-price');
-                    
-                    const imageElement = document.querySelector('.primary-image') || 
-                                        document.querySelector('.product-image img') || 
-                                        document.querySelector('img.product-main-image');
-                    
-                    // Get prices, handling different formats
-                    const priceText = priceElement?.innerText || '';
-                    const price = priceText ? parseFloat(priceText.replace(/[^\d.]/g, '')) : null;
-                    
-                    const regularPriceText = regularPriceElement?.innerText || '';
-                    const regularPrice = regularPriceText ? 
-                                        parseFloat(regularPriceText.replace(/[^\d.]/g, '')) : 
-                                        price;
-                    
-                    const imageUrl = imageElement?.src || null;
-                    
-                    // Check availability
-                    const addToCartBtn = document.querySelector('.fulfillment-add-to-cart-button') || 
-                                        document.querySelector('.add-to-cart-button');
-                    const availability = addToCartBtn?.innerText.includes('Add to Cart') ? 
-                                         'In Stock' : 'Out of Stock';
-
-                    return {
-                        productName,
-                        productURL: window.location.href,
-                        regularPrice,
-                        salePrice: price,
-                        availability,
-                        imageURL: imageUrl
-                    };
-                });
-                
-                console.log('Result:', JSON.stringify(result));
-                
-                // Check if we got a valid product
-                if (!result.productName) {
-                    console.log('No product name found, trying next proxy');
-                    await browser.close();
-                    browser = null;
-                    continue; // Try next proxy
-                }
-                
-                // Success! Close browser and return result
-                await browser.close();
-                return res.json({
-                    ...result,
-                    proxyUsed: currentProxy.split(':').slice(0, 2).join(':') // Only show IP:PORT
-                });
-                
-            } catch (proxyError) {
-                console.error(`Error with proxy ${currentProxy}:`, proxyError);
-                if (browser) {
-                    await browser.close();
-                    browser = null;
-                }
-                // Continue to next proxy
-            }
-        }
-        
-        // If we get here, all proxies failed
-        return res.status(500).json({ 
-            error: 'Failed to scrape with any proxy', 
-            detail: 'Tried all available proxies without success',
-            proxiesCount: proxies.length
-        });
-        
-    } catch (error) {
-        console.error('Scraper error:', error);
-        
-        if (browser) {
-            try {
-                await browser.close();
-            } catch (closeError) {
-                console.error('Error closing browser:', closeError);
-            }
-        }
-        
-        res.status(500).json({ 
-            error: 'Failed to scrape the product page.',
-            detail: error.toString(),
-            proxy: currentProxy ? currentProxy.split(':').slice(0, 2).join(':') : 'none'
-        });
-    }
-});
-
-// Add a test endpoint
-app.get('/test-proxy', async (req, res) => {
-    try {
-        const proxies = await getProxiesFromSheet();
-        res.json({
-            proxyCount: proxies.length,
-            proxySample: proxies.slice(0, 3).map(p => {
-                const parts = p.split(':');
-                return parts.length >= 2 ? `${parts[0]}:${parts[1]}` : p;
-            })
-        });
-    } catch (error) {
-        res.status(500).json({ error: 'Failed to test proxies', detail: error.toString() });
-    }
-});
-
-// Add a simple test endpoint
-app.get('/test', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// Start server and log to confirm it's running
-app.listen(port, () => {
-    console.log(`✅ Scraper running at http://localhost:${port}`);
-    console.log(`✅ Health check available at /health`);
-    console.log(`✅ Test endpoint available at /test`);
-    console.log(`✅ Proxy test available at /test-proxy`);
-});
+                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWe
