@@ -2,7 +2,7 @@
 {
   "name": "bestbuy-scraper",
   "version": "1.0.0",
-  "description": "BestBuy scraper for Render.com with keep-alive",
+  "description": "BestBuy scraper for Render.com with proxy and keep-alive",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

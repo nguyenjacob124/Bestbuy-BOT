@@ -1,13 +1,14 @@
 
 const puppeteer = require('puppeteer');
 const express = require('express');
+const fetch = require('node-fetch');
 const app = express();
 const port = process.env.PORT || 10000;
 
 // Dynamic Keep Alive
 setInterval(() => {
-    fetch(`https://bestbuy-bot-6my5.onrender.com/health`).catch(() => {});
-}, 240000); // 4 minutes
+    fetch('https://bestbuy-bot-6my5.onrender.com/health').catch(() => {});
+}, 240000); // every 4 minutes
 
 app.get('/health', (req, res) => {
     res.send('✅ Render app is alive!');
@@ -22,10 +23,14 @@ app.get('/scrape', async (req, res) => {
     try {
         const browser = await puppeteer.launch({
             headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--proxy-server=http://103.105.49.53:80' // Free proxy for testing
+            ]
         });
         const page = await browser.newPage();
-        await page.goto(productUrl, { waitUntil: 'networkidle2' });
+        await page.goto(productUrl, { waitUntil: 'networkidle2', timeout: 60000 });
 
         const result = await page.evaluate(() => {
             const productName = document.querySelector('h1.sku-title')?.innerText || null;
