@@ -10,7 +10,12 @@ const SHEET_ID = '1HdUUxxJPOt7DkOTEClnIFtjignXiFCs0ye99NF-IjH8';
 const SHEET_RANGE = 'Sheet1!A:A'; // Proxies in column A
 
 // Google API key (for public sheets)
-const API_KEY = 'AIzaSyDq9RtV9T3uJ8AZlX4nHCqB6f0GO6zkRgk'; // This is a dummy key - replace it with your own
+const API_KEY = 'AIzaSyDq9RtV9T3uJ8AZlX4nHCqB6f0GO6zkRgk'; // You can replace with your own
+
+// Fallback proxy if Google Sheet fails
+const FALLBACK_PROXIES = [
+    '103.105.49.53:80' // Add more reliable fallbacks if needed
+];
 
 // Cache proxies to avoid excessive API calls
 let cachedProxies = [];
@@ -49,33 +54,20 @@ async function getProxiesFromSheet() {
             return proxies;
         } else {
             console.log('No proxy data found in Google Sheet.');
-            return [];
+            return FALLBACK_PROXIES;
         }
     } catch (error) {
         console.error('Error fetching proxies:', error);
-        return [];
+        return FALLBACK_PROXIES;
     }
 }
 
-// Fallback proxy if Google Sheet fails
-const FALLBACK_PROXIES = [
-    '103.105.49.53:80' // Just an example - add more reliable fallbacks if needed
-];
-
-// Keep-alive ping every 4 minutes to prevent app from sleeping
-const APP_URL = 'https://bestbuy-bot-6my5.onrender.com';
-setInterval(() => {
-    fetch(`${APP_URL}/health`)
-        .then(res => res.text())
-        .then(body => console.log(`Health check: ${body}`))
-        .catch(err => console.error('Health check failed:', err));
-}, 240000);
-
+// Health check endpoint - keep this very simple
 app.get('/health', (req, res) => {
     res.send('✅ Render app is alive!');
 });
 
-// Add some basic error logging middleware
+// Basic error handling middleware
 app.use((err, req, res, next) => {
     console.error('Unhandled error:', err);
     res.status(500).json({ error: 'Server error', detail: err.message });
@@ -96,13 +88,9 @@ app.get('/scrape', async (req, res) => {
     let currentProxy = '';
 
     try {
-        // Get proxies from Google Sheet (with fallback)
+        // Get proxies from sheet (with fallback)
         proxies = await getProxiesFromSheet();
-        if (!proxies.length) {
-            console.log('No proxies from Google Sheet, using fallbacks');
-            proxies = FALLBACK_PROXIES;
-        }
-
+        
         // Try proxies one by one until successful
         for (let i = 0; i < proxies.length; i++) {
             currentProxy = proxies[i];
@@ -111,14 +99,14 @@ app.get('/scrape', async (req, res) => {
             let proxyArgs = [];
             let authOptions = {};
             
-            // Parse proxy details (different formats supported)
+            // Parse proxy details
             const proxyParts = currentProxy.split(':');
             
             if (proxyParts.length >= 2) {
                 const [proxyIP, proxyPort] = proxyParts;
                 proxyArgs = [`--proxy-server=http://${proxyIP}:${proxyPort}`];
                 
-                // If proxy has username/password (IP:PORT:USER:PASS format)
+                // If proxy has username/password
                 if (proxyParts.length >= 4) {
                     const [, , proxyUser, proxyPass] = proxyParts;
                     authOptions = { username: proxyUser, password: proxyPass };
@@ -126,6 +114,7 @@ app.get('/scrape', async (req, res) => {
             }
             
             try {
+                console.log('Launching browser with puppeteer...');
                 browser = await puppeteer.launch({
                     headless: true,
                     args: [
@@ -149,7 +138,8 @@ app.get('/scrape', async (req, res) => {
                     await page.authenticate(authOptions);
                 }
                 
-                // Set request timeout
+                // Set timeout
+                console.log(`Navigating to ${productUrl}...`);
                 page.setDefaultNavigationTimeout(60000);
                 
                 // Navigate to the product URL
@@ -157,6 +147,7 @@ app.get('/scrape', async (req, res) => {
                 
                 // Check if we're on a BestBuy product page
                 const url = page.url();
+                console.log(`Landed on: ${url}`);
                 if (url.includes('bestbuy.com/identity') || url.includes('captcha')) {
                     console.log('Detected captcha or login page, skipping proxy');
                     await browser.close();
@@ -165,6 +156,7 @@ app.get('/scrape', async (req, res) => {
                 }
                 
                 // Extract product info
+                console.log('Extracting product info...');
                 const result = await page.evaluate(() => {
                     const productName = document.querySelector('h1.sku-title')?.innerText || 
                                        document.querySelector('.sku-title')?.innerText || null;
@@ -206,6 +198,8 @@ app.get('/scrape', async (req, res) => {
                     };
                 });
                 
+                console.log('Result:', JSON.stringify(result));
+                
                 // Check if we got a valid product
                 if (!result.productName) {
                     console.log('No product name found, trying next proxy');
@@ -218,7 +212,7 @@ app.get('/scrape', async (req, res) => {
                 await browser.close();
                 return res.json({
                     ...result,
-                    proxyUsed: currentProxy.split(':').slice(0, 2).join(':') // Only show IP:PORT in response
+                    proxyUsed: currentProxy.split(':').slice(0, 2).join(':') // Only show IP:PORT
                 });
                 
             } catch (proxyError) {
@@ -257,7 +251,7 @@ app.get('/scrape', async (req, res) => {
     }
 });
 
-// Add a proxy test endpoint
+// Add a test endpoint
 app.get('/test-proxy', async (req, res) => {
     try {
         const proxies = await getProxiesFromSheet();
@@ -273,6 +267,15 @@ app.get('/test-proxy', async (req, res) => {
     }
 });
 
+// Add a simple test endpoint
+app.get('/test', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Start server and log to confirm it's running
 app.listen(port, () => {
     console.log(`✅ Scraper running at http://localhost:${port}`);
+    console.log(`✅ Health check available at /health`);
+    console.log(`✅ Test endpoint available at /test`);
+    console.log(`✅ Proxy test available at /test-proxy`);
 });
