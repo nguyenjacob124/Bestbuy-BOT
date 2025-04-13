@@ -1,4 +1,3 @@
-
 {
   "name": "cloud-proxy-scraper",
   "version": "1.0.0",
@@ -12,5 +11,8 @@
     "googleapis": "^105.0.0",
     "node-fetch": "^2.6.7",
     "puppeteer": "^19.11.1"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   }
 }
