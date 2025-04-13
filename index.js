@@ -139,4 +139,112 @@ app.get('/scrape', async (req, res) => {
                 const page = await browser.newPage();
                 
                 // Set a realistic user agent
-                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWe
+                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+                
+                // Set authentication if needed
+                if (authOptions.username && authOptions.password) {
+                    await page.authenticate(authOptions);
+                }
+                
+                console.log(`Navigating to ${productUrl}`);
+                
+                // Set a reasonable timeout
+                await page.goto(productUrl, { 
+                    waitUntil: 'domcontentloaded',
+                    timeout: 60000 
+                });
+                
+                console.log('Page loaded, extracting product details...');
+                
+                // Extract product details
+                const productData = await page.evaluate(() => {
+                    try {
+                        // Title
+                        const title = document.querySelector('.sku-title h1')?.textContent.trim() || 
+                                    document.querySelector('.heading-5.v-fw-regular')?.textContent.trim() ||
+                                    'Title not found';
+                        
+                        // Price
+                        const priceElement = document.querySelector('.priceView-customer-price span') || 
+                                           document.querySelector('.priceView-purchase-price');
+                        const price = priceElement ? priceElement.textContent.trim() : 'Price not found';
+                        
+                        // Availability
+                        const addToCartBtn = document.querySelector('.add-to-cart-button');
+                        const soldOutMsg = document.querySelector('.fulfillment-add-to-cart-button .btn-disabled') || 
+                                         document.querySelector('.fulfillment-add-to-cart-button')?.textContent.includes('Sold Out');
+                        
+                        const inStock = addToCartBtn && !soldOutMsg;
+                        const availability = inStock ? 'In Stock' : 'Out of Stock';
+                        
+                        // Image
+                        const imageElement = document.querySelector('.primary-image') || 
+                                           document.querySelector('.shop-media-gallery img');
+                        const image = imageElement ? imageElement.src : 'Image not found';
+                        
+                        // SKU
+                        const skuElement = document.querySelector('.sku-value');
+                        const sku = skuElement ? skuElement.textContent.trim() : 'SKU not found';
+                        
+                        return {
+                            title,
+                            price,
+                            availability,
+                            image,
+                            sku,
+                            url: window.location.href
+                        };
+                    } catch (error) {
+                        return { error: `Client-side error: ${error.message}` };
+                    }
+                });
+                
+                // Successfully scraped, close browser and return results
+                await browser.close();
+                browser = null;
+                
+                console.log('Scraping successful with proxy:', currentProxy);
+                return res.json({
+                    success: true,
+                    proxy: currentProxy, 
+                    data: productData
+                });
+                
+            } catch (error) {
+                // Close browser if there was an error with this proxy
+                if (browser) {
+                    await browser.close();
+                    browser = null;
+                }
+                
+                console.error(`Error with proxy ${currentProxy}:`, error.message);
+                
+                // Continue to next proxy
+                continue;
+            }
+        }
+        
+        // If we get here, all proxies failed
+        return res.status(500).json({ 
+            error: 'All proxies failed', 
+            message: 'Could not scrape the product page after trying all available proxies'
+        });
+        
+    } catch (error) {
+        // Make sure browser is closed
+        if (browser) {
+            await browser.close();
+        }
+        
+        console.error('Scraping error:', error);
+        return res.status(500).json({ 
+            error: 'Scraping failed', 
+            message: error.message 
+        });
+    }
+});
+
+// Start the server
+app.listen(port, () => {
+    console.log(`Server running on port ${port}`);
+});
