@@ -2,11 +2,18 @@
 const puppeteer = require('puppeteer');
 const express = require('express');
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 10000;
 
-app.use(express.json());
+// Dynamic Keep Alive
+setInterval(() => {
+    fetch(`https://bestbuy-bot-6my5.onrender.com/health`).catch(() => {});
+}, 240000); // 4 minutes
 
-app.get('/', async (req, res) => {
+app.get('/health', (req, res) => {
+    res.send('✅ Render app is alive!');
+});
+
+app.get('/scrape', async (req, res) => {
     const productUrl = req.query.url;
     if (!productUrl) {
         return res.status(400).json({ error: 'Missing URL parameter ?url=' });
@@ -51,5 +58,5 @@ app.get('/', async (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Scraper running at http://localhost:${port}`);
+    console.log(`✅ Scraper running at http://localhost:${port}`);
 });

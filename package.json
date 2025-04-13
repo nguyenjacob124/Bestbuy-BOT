@@ -2,13 +2,14 @@
 {
   "name": "bestbuy-scraper",
   "version": "1.0.0",
-  "description": "BestBuy scraper for Render.com",
+  "description": "BestBuy scraper for Render.com with keep-alive",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "puppeteer": "^19.11.1"
+    "puppeteer": "^19.11.1",
+    "node-fetch": "^2.6.7"
   }
 }
