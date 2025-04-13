@@ -1,18 +1,18 @@
+
 {
-  "name": "cloud-proxy-scraper",
+  "name": "bestbuy-bot",
   "version": "1.0.0",
-  "description": "Render.com cloud scraper with Google Sheet proxies",
+  "description": "BestBuy scraper with proxy rotation and Google Sheet integration",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "npm install puppeteer-core chrome-aws-lambda"
   },
   "dependencies": {
+    "chrome-aws-lambda": "^10.1.0",
     "express": "^4.18.2",
     "googleapis": "^105.0.0",
     "node-fetch": "^2.6.7",
-    "puppeteer": "^19.11.1"
-  },
-  "engines": {
-    "node": ">=14.0.0"
+    "puppeteer-core": "^19.11.1"
   }
 }
