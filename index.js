@@ -1,40 +1,56 @@
 const express = require('express');
 const puppeteer = require('puppeteer');
-
 const app = express();
-const port = process.env.PORT || 8080;
 
-app.use(express.json());
+app.get('/scrape', async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).send({ error: 'Missing URL' });
 
-app.post('/scrape', async (req, res) => {
-  const { url } = req.body;
-
-  if (!url) {
-    return res.status(400).json({ error: 'Missing URL in request body' });
-  }
+  let browser;
 
   try {
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    browser = await puppeteer.launch({
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-zygote'
+      ],
+      headless: 'new'
     });
+
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
-    const title = await page.title();
-    await browser.close();
+    // Block images, stylesheets, fonts
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      const type = req.resourceType();
+      if (['image', 'stylesheet', 'font'].includes(type)) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
 
-    res.json({ title });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 10000 });
+
+    const title = await page.$eval('h1.sku-title', el => el.innerText.trim());
+    const price = await page.$eval('[data-testid="price-summary"] .priceView-customer-price span', el => el.innerText.trim());
+
+    res.json({ title, price });
+
   } catch (error) {
-    console.error('Error scraping:', error);
-    res.status(500).json({ error: 'Failed to scrape the page', details: error.message });
+    console.error('Scrape Error:', error.message);
+    res.status(500).send({ error: error.message });
+  } finally {
+    if (browser) await browser.close();
   }
 });
 
-app.get('/', (req, res) => {
-  res.send('Puppeteer Scraper is running.');
+app.get('/health', (_, res) => {
+  res.send('OK');
 });
 
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Running on port ${PORT}`));
