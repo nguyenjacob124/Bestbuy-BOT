@@ -2,67 +2,39 @@ const express = require('express');
 const puppeteer = require('puppeteer');
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const port = process.env.PORT || 8080;
 
-app.get('/', (req, res) => {
-  res.send('Puppeteer Scraper is running 🚀');
-});
+app.use(express.json());
 
-app.get('/scrape', async (req, res) => {
-  const productUrl = req.query.url;
-  const proxy = req.query.proxy;
+app.post('/scrape', async (req, res) => {
+  const { url } = req.body;
 
-  if (!productUrl) {
-    return res.status(400).json({ error: 'Missing URL parameter' });
+  if (!url) {
+    return res.status(400).json({ error: 'Missing URL in request body' });
   }
 
-  let browser;
   try {
-    console.log('Launching browser...');
-    browser = await puppeteer.launch({
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        proxy ? `--proxy-server=${proxy}` : ''
-      ],
-      headless: true
+    const browser = await puppeteer.launch({
+      headless: 'new',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
-
     const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 });
 
-    if (proxy && proxy.includes('@')) {
-      const proxyAuth = proxy.split('@')[0].replace('http://', '');
-      const [username, password] = proxyAuth.split(':');
-      await page.authenticate({ username, password });
-    }
+    const title = await page.title();
+    await browser.close();
 
-    await page.waitForTimeout(1000 + Math.random() * 2000);
-
-    console.log(`Navigating to: ${productUrl}`);
-    await page.goto(productUrl, { waitUntil: 'networkidle2', timeout: 60000 });
-
-    const result = await page.evaluate(() => {
-      const title = document.querySelector('h1.sku-title')?.innerText.trim() || null;
-      const price = document.querySelector('.priceView-hero-price span')?.innerText.trim() || null;
-      const availability = document.querySelector('.fulfillment-fulfillment-summary')?.innerText.trim() || 'No info';
-      const image = document.querySelector('.primary-image')?.src || null;
-      return { title, price, availability, image };
-    });
-
-    result.url = productUrl;
-
-    console.log('Scraping done:', result);
-
-    res.json(result);
-
+    res.json({ title });
   } catch (error) {
     console.error('Error scraping:', error);
-    res.status(500).json({ error: error.toString() });
-  } finally {
-    if (browser) await browser.close();
+    res.status(500).json({ error: 'Failed to scrape the page', details: error.message });
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+app.get('/', (req, res) => {
+  res.send('Puppeteer Scraper is running.');
+});
+
+app.listen(port, () => {
+  console.log(`Server is running on port ${port}`);
 });
